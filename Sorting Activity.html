@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+            <style>.lw { font-size: 60px; }</style>
+        </head>
+        <body>
+            
+
+
+  <title>Sorting Discovery</title>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --gap-lg: 16px;
+      --gap-xl: 24px;
+      --box-size: 48px;
+    }
+    body { font-family: Arial, sans-serif; line-height: 1.5; padding: 24px; }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: var(--gap-lg);
+      margin-bottom: var(--gap-xl);
+      flex-wrap: wrap;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: var(--gap-lg);
+      margin-bottom: var(--gap-xl);
+    }
+    .letter-box {
+      width: var(--box-size);
+      height: var(--box-size);
+      text-align: center;
+      font-size: 24px;
+    }
+    #statusLabel {
+      display: inline-block;
+      min-width: 140px;
+      text-align: center;
+      font-size: 22px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: #f4f4f4;
+    }
+    button {
+      padding: 8px 14px;
+      font-size: 14px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+      background: #fff;
+    }
+    button:hover { background: #f7f7f7; }
+    #answerWrap { margin-top: var(--gap-lg); }
+    #answer { display: none; margin-top: 8px; }
+    .chip {
+      display: inline-block;
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 999px;
+      margin-right: 8px;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    #counter, #totalCounter {
+      font-weight: bold;
+      margin-left: 4px;
+    }
+    #tileArea {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .tile {
+      width: 48px;
+      height: 48px;
+      background: #e9eefc;
+      border: 2px solid #9aa6d8;
+      border-radius: 8px;
+      text-align: center;
+      line-height: 48px;
+      font-size: 24px;
+      font-weight: bold;
+      cursor: grab;
+      user-select: none;
+    }
+    .tile.dragging { opacity: 0.6; border-style: dashed; }
+  </style>
+
+
+  <p><strong>Sorting Discovery</strong></p>
+
+  <div class="controls">
+    <label for="letterCount">How many letters (from A…)?</label>
+    <input type="number" id="letterCount" min="2" max="26" value="5">
+    <button id="generateBtn">Generate</button>
+    <button id="revealBtn" aria-expanded="false" aria-controls="answer">Reveal answer</button>
+    <button id="checkOrderBtn">Check Order</button>
+    <span>Unique comparisons:<span id="counter">0 / 45</span></span>
+    <span>Total comparisons:<span id="totalCounter">0</span></span>
+  </div>
+
+  <div class="row">
+    <input type="text" maxlength="1" class="letter-box" id="box1" aria-label="First letter">
+    <label id="statusLabel" aria-live="polite">_</label>
+    <input type="text" maxlength="1" class="letter-box" id="box2" aria-label="Second letter">
+    <button id="compareBtn" title="Compare the two letters">Compare</button>
+  </div>
+
+  <!-- draggable tile area -->
+  <div id="tileArea"><div class="tile" draggable="true">I</div><div class="tile" draggable="true">A</div><div class="tile" draggable="true">H</div><div class="tile" draggable="true">F</div><div class="tile" draggable="true">J</div><div class="tile" draggable="true">B</div><div class="tile" draggable="true">C</div><div class="tile" draggable="true">G</div><div class="tile" draggable="true">E</div><div class="tile" draggable="true">D</div></div>
+
+  <div id="answerWrap">
+    <div id="answer" style="display: none;"><span class="chip">C</span><span class="chip">G</span><span class="chip">E</span><span class="chip">J</span><span class="chip">H</span><span class="chip">F</span><span class="chip">B</span><span class="chip">D</span><span class="chip">A</span><span class="chip">I</span></div>
+  </div>
+
+  <script>
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    const box1 = document.getElementById("box1");
+    const box2 = document.getElementById("box2");
+    const label = document.getElementById("statusLabel");
+    const countInput = document.getElementById("letterCount");
+    const generateBtn = document.getElementById("generateBtn");
+    const revealBtn = document.getElementById("revealBtn");
+    const compareBtn = document.getElementById("compareBtn");
+    const checkOrderBtn = document.getElementById("checkOrderBtn");
+    const answer = document.getElementById("answer");
+    const counterEl = document.getElementById("counter");
+    const totalEl = document.getElementById("totalCounter");
+    const tileArea = document.getElementById("tileArea");
+
+    let hiddenOrder = [];
+    let seenComparisons = new Set();
+    let uniqueCount = 0;
+    let totalCount = 0;
+    let maxComparisons = 0;
+
+    function shuffleInPlace(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function shuffledDistinct(base, notEqualTo) {
+      const ref = Array.isArray(notEqualTo) ? notEqualTo.join("") : null;
+      let copy = base.slice();
+      let tries = 0;
+      do {
+        shuffleInPlace(copy);
+        tries++;
+      } while (ref && copy.join("") === ref && tries < 10);
+      return copy;
+    }
+
+    function makeHiddenOrder(n) {
+      const base = alphabet.slice(0, n);
+      hiddenOrder = shuffleInPlace(base.slice());
+      renderAnswer();
+      renderTiles(base);
+      maxComparisons = n * (n - 1) / 2;
+      updateCounter();
+    }
+
+    function renderTiles(baseLetters) {
+      tileArea.innerHTML = "";
+      const startingOrder = shuffledDistinct(baseLetters, hiddenOrder);
+      startingOrder.forEach(letter => {
+        const tile = document.createElement("div");
+        tile.className = "tile";
+        tile.draggable = true;
+        tile.textContent = letter;
+        tileArea.appendChild(tile);
+      });
+      setupDragAndDrop();
+    }
+
+    function renderAnswer() {
+      const frag = document.createDocumentFragment();
+      hiddenOrder.forEach(ch => {
+        const span = document.createElement("span");
+        span.className = "chip";
+        span.textContent = ch;
+        frag.appendChild(span);
+      });
+      answer.innerHTML = "";
+      answer.appendChild(frag);
+    }
+
+    function toggleReveal() {
+      const isOpen = answer.style.display === "block";
+      answer.style.display = isOpen ? "none" : "block";
+      revealBtn.textContent = isOpen ? "Reveal answer" : "Hide answer";
+      revealBtn.setAttribute("aria-expanded", String(!isOpen));
+    }
+
+    function resetUI() {
+      box1.value = "";
+      box2.value = "";
+      label.textContent = "_";
+      box1.focus();
+      seenComparisons.clear();
+      uniqueCount = 0;
+      totalCount = 0;
+      updateCounter();
+    }
+
+    function normalizeLetter(s) {
+      if (!s) return "";
+      return s.trim().toUpperCase();
+    }
+
+    function inDomain(ch) {
+      return hiddenOrder.includes(ch);
+    }
+
+    function compareNow() {
+      const A = normalizeLetter(box1.value);
+      const B = normalizeLetter(box2.value);
+      const isLetter = ch => /^[A-Z]$/.test(ch);
+
+      if (!isLetter(A) || !isLetter(B)) {
+        label.textContent = "Type letters A–Z";
+        return;
+      }
+      if (!inDomain(A) || !inDomain(B)) {
+        label.textContent = "Out of range";
+        return;
+      }
+
+      totalCount++; // every click adds one total comparison
+
+      if (A === B) {
+        label.textContent = `${A} = ${B}`;
+        updateCounter();
+        return;
+      }
+
+      const idxA = hiddenOrder.indexOf(A);
+      const idxB = hiddenOrder.indexOf(B);
+      label.textContent = (idxA < idxB) ? `${A} < ${B}` : `${A} > ${B}`;
+
+      const [x, y] = [A, B].sort();
+      const key = `${x}|${y}`;
+      if (!seenComparisons.has(key)) {
+        seenComparisons.add(key);
+        uniqueCount++;
+      }
+      updateCounter();
+    }
+
+    function updateCounter() {
+      counterEl.textContent = `${uniqueCount} / ${maxComparisons}`;
+      totalEl.textContent = `${totalCount}`;
+    }
+
+    function checkOrder() {
+      const current = Array.from(tileArea.children).map(t => t.textContent).join("");
+      const correct = hiddenOrder.join("");
+      if (current === correct) {
+        alert("✅ Correct! The order matches the hidden list!");
+      } else {
+        alert("❌ Not quite. Keep trying!");
+      }
+    }
+
+    // drag and drop logic
+    function setupDragAndDrop() {
+      const tiles = tileArea.querySelectorAll(".tile");
+      tiles.forEach(tile => {
+        tile.addEventListener("dragstart", e => {
+          tile.classList.add("dragging");
+          e.dataTransfer.setData("text/plain", tile.textContent);
+        });
+        tile.addEventListener("dragend", () => {
+          tile.classList.remove("dragging");
+        });
+      });
+
+      tileArea.addEventListener("dragover", e => {
+        e.preventDefault();
+        const dragging = document.querySelector(".dragging");
+        const afterElement = getDragAfterElement(tileArea, e.clientX);
+        if (afterElement == null) {
+          tileArea.appendChild(dragging);
+        } else {
+          tileArea.insertBefore(dragging, afterElement);
+        }
+      });
+    }
+
+    function getDragAfterElement(container, x) {
+      const draggableElements = [...container.querySelectorAll(".tile:not(.dragging)")];
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // Events
+    generateBtn.addEventListener("click", () => {
+      const n = Math.max(2, Math.min(26, parseInt(countInput.value || "5", 10)));
+      countInput.value = n;
+      makeHiddenOrder(n);
+      resetUI();
+      if (answer.style.display === "block") renderAnswer();
+    });
+
+    revealBtn.addEventListener("click", toggleReveal);
+    compareBtn.addEventListener("click", compareNow);
+    checkOrderBtn.addEventListener("click", checkOrder);
+
+    // Initialize
+    makeHiddenOrder(parseInt(countInput.value, 10));
+  </script>
+
+
+
+            <script></script>
+        
+    
+</body>
