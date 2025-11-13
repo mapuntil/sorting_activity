@@ -201,6 +201,10 @@ let uniqueCount = 0;
 let totalCount = 0;
 let maxComparisons = 0;
 
+// NEW: track tile order so dragging into inputs doesn't change arrangement
+let originalTileOrder = [];
+let draggingIntoInput = false;
+
 /* -----------------------------
    LABEL BUTTON
 ----------------------------- */
@@ -229,6 +233,7 @@ label.addEventListener("click", () => {
 
 /* -----------------------------
    DRAG → DROP INTO INPUT ONLY
+   (do NOT permanently reorder tiles)
 ----------------------------- */
 function dropLetter(event, boxId) {
   event.preventDefault();
@@ -238,15 +243,34 @@ function dropLetter(event, boxId) {
   const box = document.getElementById(boxId);
   box.value = letter;
   showCompareButton();
+
+  // mark that this drag was for input, not sorting
+  draggingIntoInput = true;
+  restoreTileOrder();
+}
+
+function restoreTileOrder() {
+  if (!originalTileOrder.length) return;
+
+  const currentTiles = Array.from(tileArea.children);
+  const map = {};
+  currentTiles.forEach(tile => {
+    map[tile.textContent] = tile;
+  });
+
+  tileArea.innerHTML = "";
+  originalTileOrder.forEach(letter => {
+    if (map[letter]) tileArea.appendChild(map[letter]);
+  });
 }
 
 /* -----------------------------
-   FIXED SHUFFLE (VERY IMPORTANT)
+   FIXED SHUFFLE
 ----------------------------- */
 function shuffleInPlace(a) {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]]; // correctly swap
+    [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
 }
@@ -307,15 +331,23 @@ function renderTiles(baseLetters) {
     tile.addEventListener("dragstart", e => {
       tile.classList.add("dragging");
       e.dataTransfer.setData("text/plain", tile.textContent);
+
+      // record order at start of drag
+      originalTileOrder = Array.from(tileArea.children).map(t => t.textContent);
+      draggingIntoInput = false;
     });
 
     tile.addEventListener("dragend", () => {
       tile.classList.remove("dragging");
+      // if drag ended in an input, we already restored order
+      // if it was a sort-drag inside tileArea, keep the new order
     });
 
     tileArea.appendChild(tile);
   });
 
+  // initialize original order
+  originalTileOrder = Array.from(tileArea.children).map(t => t.textContent);
   setupDragAndDrop();
 }
 
@@ -391,7 +423,13 @@ function setupDragAndDrop() {
 
   tileArea.addEventListener("dragover", e => {
     e.preventDefault();
+
+    // if this drag was used to drop into an input, don't sort
+    if (draggingIntoInput) return;
+
     const dragging = document.querySelector(".dragging");
+    if (!dragging) return;
+
     const after = getAfter(tileArea, e.clientX);
     if (!after) tileArea.appendChild(dragging);
     else tileArea.insertBefore(dragging, after);
